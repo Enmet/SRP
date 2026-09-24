@@ -1,4 +1,4 @@
-//SRP - The Sox Rofi Parser - Version 1.0b
+//SRP - The Sox Rofi Parser - Version 1.0
 const std = @import("std");
 
 const TEMP_PATH = "/tmp/srp/";
@@ -79,6 +79,7 @@ const Context = struct {
     sound_dummy: []u8,                  //Stores the playback method
     audio_device: []u8,                 //Stores the pulse audio device used by paplay or gstreamer
     audio_player: []u8,                 //Stores the playback method
+    audio_volume: f32,                  //Stores the playback audio volume level, converts to u16 for pulse
 }; 
 
 const Effect = struct {
@@ -1157,12 +1158,16 @@ fn playQueue(ctx: *Context) !void {
         if (std.mem.eql(u8, ctx.audio_player, "gstreamer")){
             const gs_input = try std.fmt.allocPrint(ctx.arena.allocator(), "location={s}", .{Token.name});
             const gs_device = try std.fmt.allocPrint(ctx.arena.allocator(), "device={s}", .{ctx.audio_device});
+            const gs_volume = try std.fmt.allocPrint(ctx.arena.allocator(), "volume={}", .{ctx.audio_volume});
             _ = try std.process.run(ctx.arena.allocator(), ctx.io, .{ //GStreamer
-                .argv = &.{"gst-launch-1.0","filesrc",gs_input,"!","decodebin","!","audioconvert","!","audioresample","!","pulsesink",gs_device},
+                .argv = &.{"gst-launch-1.0", "filesrc", gs_input, "!", "decodebin", "!", "audioconvert", "!", "audioresample", "!",
+                "volume", gs_volume, "!", "pulsesink", gs_device},
             });
         }  else {
+            ctx.audio_volume = @trunc(ctx.audio_volume * 65535);
+            const pulse_volume = try std.fmt.allocPrint(ctx.arena.allocator(), "--volume={}", .{ctx.audio_volume});
             _ = try std.process.run(ctx.arena.allocator(), ctx.io, .{ //paplay
-                .argv = &.{"paplay", "--d=V1", "--volume=65535", Token.name},
+                .argv = &.{"paplay", "--d=V1", pulse_volume, Token.name},
             });
         }
     }
@@ -1236,6 +1241,7 @@ pub fn main(init: std.process.Init) !void {
         .sound_dummy = undefined,
         .audio_device = undefined,
         .audio_player = undefined,
+        .audio_volume = 1,
     };
     defer ctx.arena.deinit();
     defer ctx.arg.deinit(ctx.arena.allocator());
@@ -1339,6 +1345,12 @@ pub fn main(init: std.process.Init) !void {
                     ctx.audio_device = try std.fmt.allocPrint(ctx.arena.allocator(), "{s}", .{sound_path}); 
                 } else if (line[6] == 'P'){ 
                     ctx.audio_player = try std.fmt.allocPrint(ctx.arena.allocator(), "{s}", .{sound_path}); 
+                } else if (line[6] == 'V'){ 
+                    var volume: f32 = std.fmt.parseFloat(f32, sound_path) catch 1;
+                    if ((volume < 0) or (volume > 1.0)) {
+                        volume = 1;
+                    }
+                    ctx.audio_volume = volume; 
                 } else if (line[6] == 'R'){
                     ctx.sound_dummy = try std.fmt.allocPrint(ctx.arena.allocator(), "{s}", .{sound_path}); 
                     SRP.use_dummy = true;
