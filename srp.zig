@@ -1164,8 +1164,8 @@ fn playQueue(ctx: *Context) !void {
                 "volume", gs_volume, "!", "pulsesink", gs_device},
             });
         }  else {
-            ctx.audio_volume = @trunc(ctx.audio_volume * 65535);
-            const pulse_volume = try std.fmt.allocPrint(ctx.arena.allocator(), "--volume={}", .{ctx.audio_volume});
+            const pa_volume = @trunc(ctx.audio_volume * 65535);
+            const pulse_volume = try std.fmt.allocPrint(ctx.arena.allocator(), "--volume={}", .{pa_volume});
             _ = try std.process.run(ctx.arena.allocator(), ctx.io, .{ //paplay
                 .argv = &.{"paplay", "--d=V1", pulse_volume, Token.name},
             });
